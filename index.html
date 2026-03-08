@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basic Writing Visualization</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9fafb;
+            color: #1f2937;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #111827;
+        }
+        .upload-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 10px;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: #6b7280;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover {
+            background-color: #f3f4f6;
+            color: #374151;
+        }
+        .tab-btn.active {
+            background-color: #e5e7eb;
+            color: #111827;
+            font-weight: 600;
+        }
+        .content-area {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            min-height: 400px;
+            line-height: 1.8;
+            font-size: 18px;
+        }
+        .sentence-wrapper {
+            display: inline;
+            position: relative;
+        }
+        .sentence {
+            display: inline;
+            padding: 2px 4px;
+            margin: 0 2px;
+            border-radius: 4px;
+            cursor: default;
+            transition: background-color 0.2s;
+        }
+        .sentence.deleted {
+            text-decoration: line-through;
+            color: #6b7280;
+            border: 1px dashed #d1d5db;
+        }
+        
+        /* AI Styles */
+        .ai-red {
+            color: #dc2626; /* Red 600 */
+            background-color: #fef2f2; /* Red 50 */
+            border-bottom: 2px solid #fca5a5;
+        }
+        .ai-blue {
+            color: #2563eb; /* Blue 600 */
+            background-color: #eff6ff; /* Blue 50 */
+            border-bottom: 2px solid #93c5fd;
+        }
+        
+        /* Tooltip */
+        .tooltip {
+            visibility: hidden;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #1f2937;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            margin-bottom: 5px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            
+            /* Enhanced styling for version history */
+            min-width: 250px;
+            max-width: 400px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: normal; /* Allow wrapping */
+            text-align: left;
+            line-height: 1.4;
+        }
+        .tooltip .version-header {
+            font-weight: bold;
+            color: #fbbf24; /* Amber 400 */
+            margin-top: 8px;
+            margin-bottom: 4px;
+            border-bottom: 1px solid #4b5563;
+            padding-bottom: 2px;
+        }
+        .tooltip .version-header:first-child {
+            margin-top: 0;
+        }
+        .tooltip del {
+            color: #9ca3af; /* Gray 400 */
+            text-decoration: line-through;
+        }
+        .tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #1f2937 transparent transparent transparent;
+        }
+        .sentence-wrapper:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .legend {
+            margin-top: 20px;
+            display: flex;
+            gap: 20px;
+            font-size: 14px;
+            color: #6b7280;
+            justify-content: center;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .color-box {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Basic Writing Visualization</h1>
+
+    <div class="upload-section">
+        <p><strong>Option 1 (Recommended):</strong> Upload the raw <code>log.json</code> file directly (Contains full edit history & positions).</p>
+        <p><strong>Option 2:</strong> Upload pre-processed <code>_vis_data.json</code> or <code>log_timeline.json</code> (Timeline only, no sentence-level heatmap).</p>
+        <input type="file" id="fileInput" accept=".json">
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('heatmap')">Sentence Edit Density</button>
+        <button class="tab-btn" onclick="switchTab('ai')">AI Contribution (Final Version)</button>
+    </div>
+
+    <div id="status-message" style="text-align: center; color: #d97706; margin-bottom: 10px; display: none;"></div>
+    <div id="global-stats" style="text-align: center; color: #4b5563; margin-bottom: 20px; display: none;"></div>
+
+    <div id="content" class="content-area">
+        <p style="text-align: center; color: #9ca3af;">Waiting for data upload...</p>
+    </div>
+
+    <div id="legend" class="legend" style="display: none;"></div>
+
+    <script>
+        let currentData = [];
+        let currentTab = 'heatmap';
+        let isTimelineData = false;
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    let rawData = JSON.parse(e.target.result);
+                    
+                    const statusMsg = document.getElementById('status-message');
+                    const statsDiv = document.getElementById('global-stats');
+                    statusMsg.style.display = 'none';
+                    statsDiv.style.display = 'none';
+
+                    // Detect Format
+                    if (rawData.logs || (Array.isArray(rawData) && rawData.length > 0 && rawData[0].type && rawData[0].timestamp)) {
+                        // Raw Log Format
+                        const logs = rawData.logs || rawData;
+                        statusMsg.textContent = "Processing raw logs... Analysis running in browser.";
+                        statusMsg.style.display = 'block';
+                        
+                        // Process logs locally
+                        currentData = processRawLogs(logs);
+                        isTimelineData = false;
+                        render();
+                        
+                    } else if (Array.isArray(rawData) && rawData.length > 0 && rawData[0].hasOwnProperty('text') && rawData[0].hasOwnProperty('versions')) {
+                        // Standard _vis_data.json format
+                        isTimelineData = false;
+                        currentData = sortSentences(rawData);
+                        render();
+                        
+                    } else if (Array.isArray(rawData) && rawData.length > 0 && (rawData[0].hasOwnProperty('snapshot') || rawData[0].hasOwnProperty('mergedText'))) {
+                        // Timeline format (log_timeline.json)
+                        isTimelineData = true;
+                        currentData = processTimelineData(rawData);
+                        
+                        // Calculate global stats
+                        const totalInserted = rawData.reduce((acc, curr) => acc + (curr.insertedChars || 0), 0);
+                        const totalDeleted = rawData.reduce((acc, curr) => acc + (curr.deletionCount || 0), 0);
+                        const totalTime = rawData.reduce((acc, curr) => acc + (curr.duration || 0), 0);
+                        
+                        statusMsg.textContent = "⚠️ Timeline data loaded. Heatmap is based on global stats, not per-sentence.";
+                        statusMsg.style.display = 'block';
+                        
+                        statsDiv.innerHTML = `<strong>Total Edits:</strong> Inserted: ${totalInserted} chars | Deleted: ${totalDeleted} chars | Duration: ${totalTime.toFixed(1)}s`;
+                        statsDiv.style.display = 'block';
+                        
+                        render();
+                    } else {
+                        alert("⚠️ Unknown File Format!\n\nPlease upload 'log.json', '_vis_data.json', or 'log_timeline.json'.");
+                    }
+
+                } catch (err) {
+                    alert('Error parsing JSON: ' + err.message);
+                    console.error(err);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // Helper to count words (alphanumeric or CJK)
+        function countWords(text) {
+            if (!text) return 0;
+            // Matches sequences of alphanumeric or CJK characters
+            const matches = text.match(/[a-zA-Z0-9\u4e00-\u9fa5]+/g);
+            return matches ? matches.length : 0;
+        }
+
+        // Client-side Log Processing (Ported from Python)
+        function processRawLogs(logs) {
+            // 1. Sort Logs
+            logs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+            // 2. Replay
+            let buffer = [];
+            let allNodes = [];
+            
+            // Add index to logs for reference
+            logs.forEach((l, i) => l._idx = i);
+
+            logs.forEach((log, logIdx) => {
+                const type = log.type;
+                const pos = log.pos || 0;
+                const content = log.content || '';
+
+                if (type === 'insert' || type === 'paste') {
+                    const newNodes = [];
+                    for (let char of content) {
+                        const node = {
+                            id: Math.random().toString(36).substr(2, 9),
+                            char: char,
+                            logIdx: log._idx,
+                            sentenceId: null,
+                            isDeleted: false,
+                            color: null
+                        };
+                        newNodes.push(node);
+                        allNodes.push(node);
+                    }
+                    
+                    // Handle padding if pos > buffer length
+                    if (pos > buffer.length) {
+                        const padding = Array(pos - buffer.length).fill().map(() => ({
+                            id: 'pad', char: '', logIdx: -1, sentenceId: null, isDeleted: false, color: null
+                        }));
+                        buffer.push(...padding);
+                    }
+                    
+                    // Insert
+                    buffer.splice(pos, 0, ...newNodes);
+
+                } else if (type === 'delete' || type === 'cut') {
+                    const delLen = content.length;
+                    // In JS splice removes elements
+                    const deletedNodes = buffer.splice(pos, delLen);
+                    deletedNodes.forEach(node => {
+                        node.isDeleted = true;
+                        node.deletedByLogIdx = log._idx;
+                    });
+                    // Store deleted text in log for version history
+                    log._deletedText = deletedNodes.map(n => n.char).join('');
+                    
+                } else if (type === 'mark_red' || type === 'mark_blue') {
+                    const markLen = content.length;
+                    const targetNodes = buffer.slice(pos, pos + markLen);
+                    const color = type === 'mark_red' ? 'red' : 'blue';
+                    targetNodes.forEach(node => node.color = color);
+                }
+            });
+
+            // 3. Define Sentences
+            // Filter out padding for text generation, but keep track of indices
+            const realNodeIndices = [];
+            let finalText = "";
+            
+            buffer.forEach((node, idx) => {
+                // Assuming padding nodes have char === ''
+                // But wait, what if user typed empty string?
+                // In Python script: node.origin_log is None for padding.
+                if (node.logIdx !== -1) { // -1 is our padding marker
+                    realNodeIndices.push(idx);
+                    finalText += node.char;
+                }
+            });
+
+            const sentenceSpans = splitSentences(finalText);
+            
+            const sentences = [];
+            
+            sentenceSpans.forEach((span, idx) => {
+                const sId = idx + 1;
+                // Map span (finalText indices) back to buffer indices
+                // span.start in finalText -> realNodeIndices[span.start] in buffer
+                const bufferIndices = [];
+                for (let i = span.start; i < span.end; i++) {
+                    if (i < realNodeIndices.length) {
+                        bufferIndices.push(realNodeIndices[i]);
+                    }
+                }
+                
+                const spanNodes = bufferIndices.map(i => buffer[i]);
+                spanNodes.forEach(n => n.sentenceId = sId);
+                
+                sentences.push({
+                    id: sId,
+                    text: span.text,
+                    nodes: spanNodes,
+                    insert_words: 0,
+                    delete_words: 0,
+                    final_words: countWords(span.text),
+                    ai_label: null
+                });
+            });
+
+            // 4. Attribution Logic for Deleted Nodes
+            // Link every node to its "Next Survivor" (the node that eventually ended up in a sentence)
+            let nextSurvivorId = null;
+            // Iterate backwards to propagate the next survivor
+            for (let i = allNodes.length - 1; i >= 0; i--) {
+                const node = allNodes[i];
+                if (!node.isDeleted && node.sentenceId) {
+                    nextSurvivorId = node.sentenceId;
+                }
+                node.nextSurvivorId = nextSurvivorId;
+            }
+
+            // Group consecutive deleted nodes
+            let deletedGroups = [];
+            let currentGroup = [];
+            
+            allNodes.forEach(node => {
+                if (node.isDeleted && node.logIdx !== -1) {
+                    currentGroup.push(node);
+                } else {
+                    if (currentGroup.length > 0) {
+                        deletedGroups.push(currentGroup);
+                        currentGroup = [];
+                    }
+                }
+            });
+            if (currentGroup.length > 0) deletedGroups.push(currentGroup);
+
+            // Process Groups
+            const extraDeletes = {}; // sentenceId -> count
+            const deletedSentences = [];
+
+            deletedGroups.forEach(group => {
+                const text = group.map(n => n.char).join('');
+                const wordCount = countWords(text);
+                const hasPunctuation = /[.!?。！？]/.test(text); // Check for sentence endings in deleted content
+                
+                // Find attribution target (next survivor)
+                let targetId = group[0].nextSurvivorId;
+                // If no next survivor (deleted at end of doc), attribute to last sentence if exists
+                if (!targetId && sentences.length > 0) {
+                    targetId = sentences[sentences.length - 1].id;
+                }
+
+                if (hasPunctuation) {
+                    // It is a Deleted Sentence (Strikethrough)
+                    let prevId = 0;
+                    if (targetId) {
+                        // Insert before target
+                        // If target is S1 (id=1), prev_id should be 0.
+                        // If target is S2 (id=2), prev_id should be 1.
+                        prevId = targetId - 1;
+                    } else {
+                        // After last sentence
+                        if (sentences.length > 0) prevId = sentences[sentences.length - 1].id;
+                    }
+                    
+                    // Determine AI label for color
+                    let red = 0, blue = 0;
+                    group.forEach(n => {
+                        if (n.color === 'red') red++;
+                        if (n.color === 'blue') blue++;
+                    });
+                    let aiLabel = null;
+                    if (red > blue && red > 0) aiLabel = 'red';
+                    else if (blue > 0) aiLabel = 'blue';
+
+                    deletedSentences.push({
+                        id: 'del_' + Math.random().toString(36).substr(2, 5),
+                        text: text,
+                        is_deleted: true,
+                        insert_words: wordCount,
+                        delete_words: wordCount,
+                        final_words: 0,
+                        ai_label: aiLabel,
+                        prev_id: prevId
+                    });
+                } else {
+                    // It is a fragment -> Merge to Target Sentence
+                    if (targetId) {
+                        if (!extraDeletes[targetId]) extraDeletes[targetId] = 0;
+                        extraDeletes[targetId] += wordCount;
+                    }
+                }
+            });
+
+            // 5. Build Version History per Sentence (Refined)
+            // Goal: Group contiguous edits into versions, handle logs spanning multiple sentences, add time intervals.
+
+            // Pre-process: Group nodes by logIdx to avoid multiple scans
+            const nodesByLog = new Map(); // logIdx -> [{node, type: 'insert'|'delete'}]
+            
+            // Pass 1: Collect Inserted nodes
+            allNodes.forEach(node => {
+                if (node.sentenceId) {
+                    if (!nodesByLog.has(node.logIdx)) nodesByLog.set(node.logIdx, []);
+                    nodesByLog.get(node.logIdx).push({ node, type: 'insert', sId: node.sentenceId });
+                }
+            });
+            
+            // Pass 2: Collect Deleted nodes (attribute deletion log to sentence)
+            allNodes.forEach(node => {
+                if (node.isDeleted && node.deletedByLogIdx !== undefined) {
+                    // Attribute to the sentence the node belonged to, or where it was merged
+                    const targetId = node.sentenceId || node.nextSurvivorId;
+                    if (targetId) {
+                        if (!nodesByLog.has(node.deletedByLogIdx)) nodesByLog.set(node.deletedByLogIdx, []);
+                        nodesByLog.get(node.deletedByLogIdx).push({ node, type: 'delete', sId: targetId });
+                    }
+                }
+            });
+
+            // Initialize version tracking
+            const sentenceVersions = {}; // sentenceId -> [{ id: 1, startTime: ms, endTime: ms, duration: ms, content: [] }]
+            let lastGlobalSentenceId = null;
+            // Track end time of the LAST version for interval calculation (though user now wants duration)
+            const lastVersionEndTime = {}; // sentenceId -> timestamp (ms)
+
+            logs.forEach((log, logIdx) => {
+                const affectedNodes = nodesByLog.get(log._idx);
+                if (!affectedNodes || affectedNodes.length === 0) return;
+
+                // Group affected nodes by sentenceId within this log
+                const affectedSentences = {}; // sId -> { type: 'insert'|'delete', text: string }
+
+                affectedNodes.forEach(item => {
+                    if (!affectedSentences[item.sId]) {
+                        affectedSentences[item.sId] = { insertText: '', deleteText: '' };
+                    }
+                    if (item.type === 'insert') {
+                        affectedSentences[item.sId].insertText += item.node.char;
+                    } else {
+                        affectedSentences[item.sId].deleteText += item.node.char;
+                    }
+                });
+
+                // Process sentences in increasing ID order
+                const sIds = Object.keys(affectedSentences).map(Number).sort((a, b) => a - b);
+
+                sIds.forEach(sId => {
+                    const content = affectedSentences[sId];
+                    if (!sentenceVersions[sId]) {
+                        sentenceVersions[sId] = [];
+                    }
+
+                    const versions = sentenceVersions[sId];
+                    let timestamp = log.timestamp;
+                    
+                    // Handle float seconds (e.g. 1770282540.961) vs ms
+                    // If less than year 3000 in seconds (32503680000), treat as seconds
+                    if (timestamp < 100000000000) {
+                        timestamp = timestamp * 1000;
+                    }
+                    
+                    timestamp = new Date(timestamp).getTime(); // Ensure timestamp is ms integer
+                    
+                    // Determine if we need a new version
+                    // Condition: Switched FROM another sentence TO this one.
+                    // Also check if it's the very first edit to this sentence.
+                    const isNewSession = (lastGlobalSentenceId !== sId);
+                    
+                    if (versions.length === 0 || isNewSession) {
+                        versions.push({
+                            id: versions.length + 1,
+                            startTime: timestamp,
+                            endTime: timestamp,
+                            duration: 0, // Will update
+                            content: []
+                        });
+                    }
+
+                    // Update global tracker
+                    lastGlobalSentenceId = sId;
+                    
+                    // Update current version
+                    const currentVer = versions[versions.length - 1];
+                    currentVer.endTime = timestamp; // Extend end time
+                    // Ensure duration is non-negative
+                    const diff = (currentVer.endTime - currentVer.startTime);
+                    currentVer.duration = (diff > 0 ? diff : 0) / 1000; // seconds
+
+                    // Add content
+                    if (content.insertText) {
+                        currentVer.content.push({ type: 'insert', text: content.insertText });
+                    }
+                    if (content.deleteText) {
+                        currentVer.content.push({ type: 'delete', text: content.deleteText });
+                    }
+                });
+            });
+
+            // 6. Finalize Result Data
+            const visData = [];
+
+            sentences.forEach(s => {
+                s.delete_words = extraDeletes[s.id] || 0;
+                // Fix: Insert - Delete = Final => Insert = Final + Delete
+                s.insert_words = s.final_words + s.delete_words;
+
+                // AI Label
+                let red = 0, blue = 0;
+                s.nodes.forEach(n => {
+                    if (n.color === 'red') red++;
+                    if (n.color === 'blue') blue++;
+                });
+                
+                let aiLabel = null;
+                if (red > blue && red > 0) aiLabel = 'red';
+                else if (blue > 0) aiLabel = 'blue';
+
+                visData.push({
+                    id: s.id,
+                    text: s.text,
+                    is_deleted: false,
+                    insert_words: s.insert_words,
+                    delete_words: s.delete_words,
+                    final_words: s.final_words,
+                    ai_label: aiLabel,
+                    prev_id: s.id - 1,
+                    versions: sentenceVersions[s.id] || []
+                });
+            });
+
+            // Add deleted sentences
+            // Deleted sentences might also have versions if they were edited before being deleted.
+            // But for now, let's keep them simple or try to attach versions if possible.
+            // The `deletedSentences` array doesn't have `versions` attached yet.
+            // If we want versions for deleted sentences, we need to map their ID in logToSentence too.
+            // But deleted sentences don't have a stable ID until *after* this process?
+            // Actually, we generated `deletedSentences` in step 4.
+            // We can try to backfill. 
+            // However, the user asked for "Sentence Edit Density" tab, which usually shows surviving sentences + deleted ones.
+            // Let's just attach the versions we found for them if any.
+            // Wait, `deletedSentences` are "virtual".
+            // If a log belongs to a deleted sentence, `logToSentence` maps to `targetId`.
+            // So the versions are attached to the *target* (surviving) sentence.
+            // This effectively merges the history of the deleted fragment into the survivor.
+            // This seems consistent with "If he goes to edit another sentence...".
+            
+            visData.push(...deletedSentences);
+            
+            return sortSentences(visData);
+        }
+
+        function splitSentences(text) {
+            const sentences = [];
+            const regex = /([.!?]+)(?=\s|$)/g;
+            let lastIndex = 0;
+            let match;
+            
+            while ((match = regex.exec(text)) !== null) {
+                const end = match.index + match[0].length;
+                const spanText = text.substring(lastIndex, end);
+                if (spanText.trim()) {
+                    sentences.push({ start: lastIndex, end: end, text: spanText });
+                }
+                lastIndex = end;
+            }
+            
+            const remaining = text.substring(lastIndex);
+            if (remaining.trim()) {
+                sentences.push({ start: lastIndex, end: text.length, text: remaining });
+            }
+            
+            return sentences;
+        }
+
+        function processTimelineData(timelineData) {
+            // Extract the final snapshot from the last entry
+            // Filter out entries that don't have a snapshot or are just IDLE/Setup if needed
+            // But usually the last entry has the latest state.
+            
+            // Sort by ID just in case
+            timelineData.sort((a, b) => a.id - b.id);
+            
+            const lastEntry = timelineData[timelineData.length - 1];
+            const finalText = lastEntry.snapshot || "";
+            
+            // Split into sentences
+            // Simple regex for sentence splitting matching Python's logic roughly
+            // ([.!?]+)(?=\s|$)
+            const sentences = [];
+            const regex = /([.!?]+)(?=\s|$)/g;
+            let lastIndex = 0;
+            let match;
+            
+            while ((match = regex.exec(finalText)) !== null) {
+                const end = match.index + match[0].length;
+                const text = finalText.substring(lastIndex, end).trim();
+                if (text) {
+                    sentences.push({
+                        text: text,
+                        insert_len: 0,
+                        delete_len: 0,
+                        insert_words: 0,
+                        delete_words: 0,
+                        final_words: countWords(text),
+                        is_deleted: false,
+                        ai_label: null
+                    });
+                }
+                lastIndex = end;
+            }
+            
+            const remaining = finalText.substring(lastIndex).trim();
+            if (remaining) {
+                sentences.push({
+                    text: remaining,
+                    insert_len: 0,
+                    delete_len: 0,
+                    is_deleted: false,
+                    ai_label: null
+                });
+            }
+            
+            return sentences;
+        }
+
+        // Reconstruct the text flow by inserting deleted sentences at their original positions
+        function sortSentences(data) {
+            const real = data.filter(d => !d.is_deleted).sort((a, b) => a.id - b.id);
+            const deleted = data.filter(d => d.is_deleted);
+            
+            let sorted = [];
+            const deletedMap = {}; // Map prev_id -> [deleted sentences]
+            
+            deleted.forEach(d => {
+                const pid = d.prev_id;
+                if (!deletedMap[pid]) deletedMap[pid] = [];
+                deletedMap[pid].push(d);
+            });
+            
+            // Insert deleted sentences that appeared before the first sentence
+            if (deletedMap[0]) sorted.push(...deletedMap[0]);
+            
+            real.forEach(s => {
+                sorted.push(s);
+                // Insert deleted sentences that appeared after this sentence
+                if (deletedMap[s.id]) sorted.push(...deletedMap[s.id]);
+            });
+            
+            return sorted;
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            render();
+        }
+
+        function render() {
+            if (!currentData.length) return;
+
+            const container = document.getElementById('content');
+            const legend = document.getElementById('legend');
+            container.innerHTML = '';
+            legend.style.display = 'flex';
+            legend.innerHTML = '';
+
+            if (currentTab === 'heatmap') {
+                renderHeatmap(container);
+                legend.innerHTML = `
+                    <div class="legend-item"><div class="color-box" style="background: white; border: 1px solid #e5e7eb;"></div>Original Draft</div>
+                    <div class="legend-item"><div class="color-box" style="background: rgba(37, 99, 235, 0.2)"></div>Low Edits</div>
+                    <div class="legend-item"><div class="color-box" style="background: rgba(37, 99, 235, 0.8)"></div>High Edits</div>
+                    <div class="legend-item"><span style="text-decoration: line-through; color: #6b7280; border: 1px dashed #ccc;">Deleted Sentence</span></div>
+                `;
+            } else {
+                renderAI(container);
+                legend.innerHTML = `
+                    <div class="legend-item"><div class="color-box" style="background: #fef2f2; border: 1px solid #fca5a5;"></div>AI Generated (Red)</div>
+                    <div class="legend-item"><div class="color-box" style="background: #eff6ff; border: 1px solid #93c5fd;"></div>AI Co-edited (Blue)</div>
+                    <div class="legend-item"><div class="color-box" style="background: white; border: 1px solid #e5e7eb;"></div>Human Written</div>
+                `;
+            }
+        }
+
+        function renderHeatmap(container) {
+            // Calculate max density
+            let maxDensity = 0;
+            currentData.forEach(d => {
+                const finalWords = d.final_words || 0;
+                const edits = (d.insert_words || 0) + (d.delete_words || 0);
+                let den = 0;
+                if (finalWords > 0) den = edits / finalWords;
+                else if (edits > 0) den = 1;
+                if (den > maxDensity) maxDensity = den;
+            });
+            if (maxDensity === 0) maxDensity = 1;
+
+            currentData.forEach(s => {
+                const finalWords = s.final_words || 0;
+                const insertWords = s.insert_words || 0;
+                const deleteWords = s.delete_words || 0;
+                const edits = insertWords + deleteWords;
+                
+                let density = 0;
+                if (finalWords > 0) {
+                    density = edits / finalWords;
+                } else if (edits > 0) {
+                    density = 1.0;
+                }
+
+                // Calculate relative intensity above baseline (1.0)
+                let alpha = 0;
+                if (density > 1) {
+                    const range = maxDensity - 1;
+                    if (range > 0) {
+                        const relative = (density - 1) / range;
+                        // Map 0..1 to 0.1..0.8 to ensure visibility for small edits
+                        alpha = 0.1 + (relative * 0.7);
+                    } else {
+                        alpha = 0.1; // Fallback if range is 0 but density > 1 (should not happen)
+                    }
+                }
+
+                const bgColor = s.is_deleted 
+                    ? `rgba(200, 200, 200, 0.5)` 
+                    : (alpha > 0 ? `rgba(37, 99, 235, ${alpha})` : 'white');
+                
+                const wrapper = document.createElement('div');
+                wrapper.className = 'sentence-wrapper';
+
+                const span = document.createElement('div');
+                span.className = 'sentence' + (s.is_deleted ? ' deleted' : '');
+                span.textContent = s.text + ' ';
+                span.style.backgroundColor = bgColor;
+
+                const tooltip = document.createElement('div');
+                tooltip.className = 'tooltip';
+                
+                // Build version history HTML
+                let historyHtml = `<div><strong>Stats:</strong> Ins: ${insertWords}, Del: ${deleteWords}, Final: ${finalWords}</div>`;
+
+                // Helper to format Beijing Time
+                function formatBeijingTime(ms) {
+                    if (!ms) return '';
+                    // Create date object
+                    const date = new Date(ms);
+                    
+                    // Convert to UTC first
+                    // date.getTime() is UTC milliseconds since epoch.
+                    // To display as Beijing Time (UTC+8) using local getters (getFullYear etc):
+                    // We need to create a new Date object that represents "Beijing Local Time" as if it were UTC.
+                    // Actually, simpler:
+                    // 1. Get UTC components? No, getUTC... methods exist.
+                    // 2. Add 8 hours to the timestamp and treat as UTC?
+                    // Let's stick to the offset method:
+                    
+                    // date.getTimezoneOffset() returns minutes (User Local - UTC). 
+                    // e.g. Beijing is UTC+8. Local is Beijing. Offset is -480.
+                    // UTC = Local + Offset * 60000.
+                    // UTC = date.getTime() + (date.getTimezoneOffset() * 60000).
+                    
+                    // But wait, date.getTime() IS ALREADY UTC.
+                    // The `new Date(utc + offset)` trick creates a Date object whose `get...` methods return the shifted time.
+                    
+                    const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
+                    const beijingDate = new Date(utc + (3600000 * 8));
+                    
+                    const y = beijingDate.getFullYear();
+                    const m = String(beijingDate.getMonth() + 1).padStart(2, '0');
+                    const d = String(beijingDate.getDate()).padStart(2, '0');
+                    const h = String(beijingDate.getHours()).padStart(2, '0');
+                    const min = String(beijingDate.getMinutes()).padStart(2, '0');
+                    const s = String(beijingDate.getSeconds()).padStart(2, '0');
+                    const msPart = String(beijingDate.getMilliseconds()).padStart(3, '0');
+                    
+                    return `${y}-${m}-${d} ${h}:${min}:${s}.${msPart}`;
+                }
+
+                if (s.versions && s.versions.length > 0) {
+                    s.versions.forEach(v => {
+                        let contentHtml = '';
+                        v.content.forEach(op => {
+                            const safeText = op.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                            if (op.type === 'insert') {
+                                contentHtml += `<span>${safeText}</span>`;
+                            } else if (op.type === 'delete') {
+                                contentHtml += `<del>${safeText}</del>`;
+                            }
+                        });
+                        
+                        const timeStr = formatBeijingTime(v.startTime);
+                        // Show both absolute time and duration
+                        const label = `Time: ${timeStr} (Duration: ${v.duration.toFixed(1)}s)`;
+                        
+                        historyHtml += `<div class="version-header">Version ${v.id} <span style="font-weight:normal; font-size: 0.9em; color: #fbbf24;">${label}</span></div><div>${contentHtml}</div>`;
+                    });
+                } else {
+                    historyHtml += `<div>No content</div>`;
+                }
+
+                tooltip.innerHTML = historyHtml;
+                
+                wrapper.appendChild(span);
+                wrapper.appendChild(tooltip);
+                container.appendChild(wrapper);
+            });
+        }
+
+        function renderAI(container) {
+            const visibleSentences = currentData.filter(d => !d.is_deleted);
+
+            visibleSentences.forEach(s => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'sentence-wrapper';
+
+                const span = document.createElement('div');
+                span.className = 'sentence';
+                span.textContent = s.text + ' ';
+                
+                let tooltipText = "Human Written";
+                
+                if (s.ai_label === 'red') {
+                    span.classList.add('ai-red');
+                    tooltipText = "AI Generated";
+                } else if (s.ai_label === 'blue') {
+                    span.classList.add('ai-blue');
+                    tooltipText = "AI Co-edited";
+                }
+
+                const tooltip = document.createElement('span');
+                tooltip.className = 'tooltip';
+                tooltip.textContent = tooltipText;
+
+                wrapper.appendChild(span);
+                wrapper.appendChild(tooltip);
+                container.appendChild(wrapper);
+            });
+        }
+    </script>
+</body>
+</html>
